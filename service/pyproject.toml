@@ -1,0 +1,75 @@
+[project]
+name = "atlas"
+version = "0.1.0"
+description = "A production-grade Retrieval-Augmented Generation (RAG) service."
+readme = "README.md"
+requires-python = ">=3.11"
+
+dependencies = [
+    "aiosqlite>=0.22.1",
+    "alembic>=1.18.4",
+    "asyncpg>=0.31.0",
+    "beautifulsoup4>=4.12.0",
+    "docx2txt>=0.8",
+    "email-validator>=2.0.0",
+    "fastapi>=0.139.0",
+    "pypdf>=5.0.0",
+    "jwt[crypto]>=1.4.0",
+    "lancedb>=0.34.0",
+    "langchain-community>=0.4.2",
+    "langchain-text-splitters>=1.1.2",
+    "linkify-it-py>=2.1.0",
+    "markdown-it-py>=4.2.0",
+    "pgvector>=0.4.2",
+    "pwdlib[argon2]>=0.3.0",
+    "pydantic>=2.13.4",
+    "pydantic-settings>=2.14.1",
+    "python-dotenv>=1.2.2",
+    "python-magic>=0.4.27",
+    "python-multipart>=0.0.32",
+    "sqlalchemy>=2.0.50",
+    "uvicorn[standard]>=0.51.0",
+    "chardet>=7.5.1",
+    "langchain-ollama>=1.1.0",
+    "langchain-openai>=1.4.3",
+    "langchain-anthropic>=1.5.5",
+]
+
+[dependency-groups]
+dev = [
+    "ipython>=9.6.0",
+    "pytest>=9.1.1",
+    "pytest-cov>=7.0.0",
+    "ruff>=0.13.0",
+    "mypy>=1.18.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+addopts = [
+    "-ra",
+]
+
+[tool.ruff]
+line-length = 79
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "F",
+    "I",
+    "UP",
+    "B",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Alembic autogenerates long op.create_table/sa.Column lines; leave them.
+"migrations/versions/*" = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unused_configs = true

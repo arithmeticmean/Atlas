@@ -1,0 +1,61 @@
+# Atlas — the whole app (React UI + FastAPI API) in one container, plus an
+# optional Ollama container that starts only when your config uses it.
+#
+#   python3 configure.py      # pick providers/models -> writes .env
+#   docker compose up -d      # -> http://localhost:8000
+#   docker compose logs -f
+#   docker compose down
+#
+# configure.py sets COMPOSE_PROFILES=ollama in .env when (and only when) an
+# Ollama model is chosen, so the ollama service is brought up on demand; it
+# pulls the configured models on first start (cached in a named volume). When
+# you pick OpenAI/Anthropic instead, no ollama container runs. All app state
+# (SQLite, LanceDB, blobs) persists in ./run.
+
+services:
+  atlas:
+    build: .
+    image: atlas:local
+    env_file: .env
+    environment:
+      # runtime storage is fixed to the mounted volume (overrides .env)
+      DATABASE_URL: sqlite+aiosqlite:////data/atlas.db
+      VECTOR_PATH: /data/lance
+      BLOB_PATH: /data/blobs
+    ports:
+      - "${ATLAS_PORT:-8000}:8000"
+    volumes:
+      - ./run:/data
+    depends_on:
+      ollama:
+        condition: service_healthy
+        required: false      # ok if the ollama profile isn't active
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama
+    profiles: ["ollama"]     # only started when COMPOSE_PROFILES=ollama
+    environment:
+      OLLAMA_PULL_MODELS: ${OLLAMA_PULL_MODELS:-}
+    volumes:
+      - ollama-models:/root/.ollama
+    entrypoint: ["/bin/sh", "-lc"]
+    command:
+      - |
+        ollama serve &
+        until ollama list >/dev/null 2>&1; do sleep 1; done
+        for m in $$OLLAMA_PULL_MODELS; do
+          echo "==> pulling $$m"; ollama pull "$$m" || true
+        done
+        touch /tmp/ready
+        wait
+    healthcheck:
+      # healthy only once the configured models are pulled, so the app waits
+      test: ["CMD-SHELL", "test -f /tmp/ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 180
+    restart: unless-stopped
+
+volumes:
+  ollama-models:

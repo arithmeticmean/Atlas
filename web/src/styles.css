@@ -1,0 +1,70 @@
+@import 'tailwindcss';
+
+/* Design tokens -> Tailwind utilities (bg-elev, text-dim, border-line,
+   text-accent, bg-accent/15, …). Change a value here and it flows everywhere. */
+@theme {
+  --color-bg: #0a0c12;
+  --color-elev: #12161f;
+  --color-elev-2: #1a1f2b;
+  --color-input: #0e121b;
+  --color-line: #232936;
+  --color-line-2: #313a4c;
+  --color-ink: #edf0f6;
+  --color-dim: #97a2b6;
+  --color-faint: #626d82;
+  --color-accent: #818cf8;
+  --color-accent-2: #c084fc;
+  --color-accent-strong: #6366f1;
+  --color-ok: #34d399;
+  --color-warn: #fbbf24;
+  --color-bad: #fb7185;
+
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial,
+    sans-serif;
+}
+
+/* The page canvas + scrollbars are the only things that can't be expressed as
+   utilities on an element; everything else lives in the JSX as Tailwind. */
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+  body {
+    color: var(--color-ink);
+    background:
+      radial-gradient(1200px 600px at 15% -10%, rgb(129 140 248 / 0.08), transparent 60%),
+      radial-gradient(1000px 700px at 110% 10%, rgb(192 132 252 / 0.06), transparent 55%),
+      linear-gradient(180deg, #0d1018, #0a0c12);
+    background-attachment: fixed;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection {
+    background: rgb(129 140 248 / 0.22);
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-line-2) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: var(--color-line-2);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+}
+
+/* subtle entrance for chat turns (used via animate-[msgin_...]) */
+@keyframes msgin {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

@@ -1,0 +1,40 @@
+# One .gitignore for the whole atlas project (repo root).
+
+# --- Python (service) ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# --- Secrets / local env ---
+.env
+.env.*
+!.env.example
+
+# --- Runtime data (SQLite DB, LanceDB dataset, blob store) ---
+service/data/
+*.db
+*.sqlite3
+
+# --- Launcher run dir (generated env with secrets + all runtime state) ---
+/run/
+
+# --- Node / Vite (web) ---
+node_modules/
+dist/
+*.local
+
+# --- Reference clone & retired code (not part of the product) ---
+.ref/
+.bak/
+
+# --- Editor / OS ---
+.DS_Store
+*.swp
+.idea/
+.vscode/
