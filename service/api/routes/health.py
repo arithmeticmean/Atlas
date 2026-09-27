@@ -5,13 +5,21 @@
   embedding index is ready / not reindexing). Safe for orchestrator probes.
 * ``GET /status``       -- owner/admin only; full diagnostics (providers,
   queue depth, reindex state). Gated because it reveals infra detail.
+* ``GET /network``      -- any signed-in caller; how this instance can be
+  reached from other machines. Not gated to admins: a caller who is already
+  connected and authenticated knows the address they used.
 """
 
 from fastapi import APIRouter, Depends, Request, Response, status
 
-from api.dependencies import _job_queue_uow, require_role
-from config import settings
-from service import EmbeddingIndex
+from service.api.dependencies import (
+    CurrentPrincipal,
+    _job_queue_uow,
+    require_role,
+)
+from service.config import get_settings, settings
+from service.core import network
+from service.core.embedding_index import EmbeddingIndex
 
 router = APIRouter(tags=["health"])
 
@@ -51,5 +59,29 @@ async def status_report(
             "provider": settings.llm_provider,
             "model": settings.llm_model,
         },
+        "retrieval": {
+            "mode": settings.search_mode,
+            "rerank_answers": settings.rerank_answers,
+            "rerank_search": settings.rerank_search,
+            "rerank_candidates": settings.rerank_candidates,
+        },
         "queue": queue_counts,
+    }
+
+
+@router.get("/network")
+async def network_info(principal: CurrentPrincipal) -> dict[str, object]:
+    """Where this instance can be reached from other devices.
+
+    Deliberately says nothing about invites. An invite token is a credential
+    and is valid whatever address it is redeemed at; this endpoint answers the
+    separate question of what that address is.
+    """
+    current = get_settings()
+    info = network.describe(current.host, current.port)
+    return {
+        "bound_host": info.bound_host,
+        "port": info.port,
+        "loopback_only": info.loopback_only,
+        "addresses": info.addresses,
     }

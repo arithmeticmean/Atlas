@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 
-from models import Project, ProjectMember
+from service.models import Project, ProjectMember
 
 
 class ProjectStore(ABC):

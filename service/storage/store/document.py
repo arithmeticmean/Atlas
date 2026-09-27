@@ -2,8 +2,8 @@
 
 The bytes of an ingested document as they landed on disk (or any blob
 backend). Metadata about the document lives in
-:mod:`storage.store.document_meta`; this port only owns the raw payload. The
-concrete implementation lives in ``storage/blob``.
+:mod:`service.storage.store.document_meta`; this port only owns the raw
+payload. The concrete implementation lives in ``storage/blob``.
 
 The port accepts a binary stream (``BinaryIO``) rather than the web
 framework's upload type, so storage stays framework-agnostic. Because the

@@ -2,8 +2,8 @@
 
 A durable work list for the background embedding step. Producers (upload, any
 connector) call :meth:`JobQueue.enqueue` after a document's bytes are in the
-file store; the worker (:mod:`service.worker`) drains it via :meth:`claim`,
-running one document's ingestion per job.
+file store; the worker (:mod:`service.core.worker`) drains it via
+:meth:`claim`, running one document's ingestion per job.
 
 The queue is deliberately tiny and backend-agnostic: the SQL adapter in
 ``storage/sql/jobs.py`` implements it against a table, but a Redis/broker

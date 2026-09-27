@@ -4,7 +4,7 @@ from sqlalchemy import DateTime, String
 from sqlalchemy import Enum as SqlEnum
 from sqlalchemy.orm import Mapped, mapped_column
 
-from storage.sql.db import Base
+from service.storage.sql.db import Base
 
 
 class Project(Base):

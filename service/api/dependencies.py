@@ -5,7 +5,6 @@ blob store, inside a single session whose transaction commits when the request
 finishes successfully (``get_session`` handles commit/rollback).
 """
 
-import asyncio
 from collections.abc import (
     AsyncGenerator,
     AsyncIterator,
@@ -15,62 +14,72 @@ from collections.abc import (
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import timedelta
+from functools import lru_cache
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from langchain_core.embeddings import Embeddings
 
-from config import settings
-from ingest import IngestionPipeline, build_embeddings
-from models import Project
-from service import (
-    AnswerService,
+from service.config import settings
+from service.core.answer import AnswerService
+from service.core.auth import (
     AuthService,
-    ConnectorManager,
-    ConnectorService,
-    DocumentService,
-    EmbeddingIndex,
-    IngestionService,
     InvalidToken,
     PermissionDenied,
     Principal,
-    ProjectService,
-    SearchService,
     TokenCodec,
-    UnknownProject,
-    build_chat_model,
-    ensure_owner,
 )
-from service.worker import IngestionWorker, OnProgress
-from storage.blob.disk import DiskDocumentStore
-from storage.sql import get_session
-from storage.sql.connector import SqlConnectorStore
-from storage.sql.document_meta import SqlDocumentMetaStore
-from storage.sql.jobs import SqlJobQueue
-from storage.sql.project import SqlProjectStore
-from storage.sql.user import SqlUserStore
-from storage.store import (
+from service.core.connector_manager import ConnectorManager
+from service.core.connectors import ConnectorService
+from service.core.document import DocumentService
+from service.core.embedding_index import EmbeddingIndex
+from service.core.ingestion import IngestionService
+from service.core.llm import build_chat_model
+from service.core.projects import ProjectService, UnknownProject
+from service.core.search import SearchService
+from service.core.worker import IngestionWorker, OnProgress
+from service.ingest import IngestionPipeline, build_embeddings
+from service.models import Project
+from service.storage.blob.disk import DiskDocumentStore
+from service.storage.lance import LanceChunkIndex
+from service.storage.sql import get_session
+from service.storage.sql.connector import SqlConnectorStore
+from service.storage.sql.document_meta import SqlDocumentMetaStore
+from service.storage.sql.jobs import SqlJobQueue
+from service.storage.sql.project import SqlProjectStore
+from service.storage.sql.user import SqlUserStore
+from service.storage.store import (
     ConnectorStore,
     DocumentMetaStore,
     JobQueue,
+    ProjectStore,
     UserStore,
 )
-from storage.vector.lancedb import LanceDB
+
 
 # The signing key and TTLs are process-wide, so build the codec once and share
 # it across requests; only the per-request DB session is rebuilt each time.
-_token_codec = TokenCodec(
-    secret=settings.jwt_secret,
-    algorithm=settings.jwt_algorithm,
-    access_ttl=timedelta(minutes=settings.access_token_ttl_minutes),
-    refresh_ttl=timedelta(minutes=settings.refresh_token_ttl_minutes),
-    invite_ttl=timedelta(minutes=settings.invite_token_ttl_minutes),
-)
+# Built on first use, not at import: the secret comes from the instance
+# directory, which may not exist yet when this module is first imported (see
+# cli.init).
+@lru_cache
+def _codec() -> TokenCodec:
+    return TokenCodec(
+        secret=settings.jwt_secret,
+        algorithm=settings.jwt_algorithm,
+        access_ttl=timedelta(minutes=settings.access_token_ttl_minutes),
+        refresh_ttl=timedelta(minutes=settings.refresh_token_ttl_minutes),
+        invite_ttl=timedelta(minutes=settings.invite_token_ttl_minutes),
+    )
+
 
 # authN/authZ are stateless (token-only), so one shared, store-less service
 # serves every request. The account flows get their own store-backed service
 # per request (see get_auth_service).
-_stateless_auth = AuthService(token_codec=_token_codec)
+@lru_cache
+def _auth() -> AuthService:
+    return AuthService(token_codec=_codec())
 
 # auto_error=False so a missing/blank header yields None and we can raise our
 # own 401 (with a WWW-Authenticate header) rather than FastAPI's default 403.
@@ -80,7 +89,7 @@ _bearer = HTTPBearer(auto_error=False)
 async def get_auth_service() -> AsyncIterator[AuthService]:
     async with get_session() as session:
         yield AuthService(
-            token_codec=_token_codec,
+            token_codec=_codec(),
             user_store=SqlUserStore(session),
         )
 
@@ -98,7 +107,7 @@ async def get_signup_services() -> (
     async with get_session() as session:
         yield (
             AuthService(
-                token_codec=_token_codec,
+                token_codec=_codec(),
                 user_store=SqlUserStore(session),
             ),
             ProjectService(store=SqlProjectStore(session)),
@@ -123,7 +132,7 @@ def get_current_principal(
             headers={"WWW-Authenticate": "Bearer"},
         )
     try:
-        return _stateless_auth.authenticate(credentials.credentials)
+        return _auth().authenticate(credentials.credentials)
     except InvalidToken as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -149,7 +158,7 @@ def require_role(role: str) -> Callable[[Principal], Principal]:
 
     def dependency(principal: CurrentPrincipal) -> Principal:
         try:
-            _stateless_auth.authorize(principal, require_role=role)
+            _auth().authorize(principal, require_role=role)
         except PermissionDenied as exc:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)
@@ -193,16 +202,13 @@ async def _reindex_uow() -> (
 
 
 async def _wipe_vector_table() -> None:
-    """Drop the vector table (leaving the lock file beside it intact)."""
+    """Drop the chunk index for a re-embed (the lock file beside it stays).
 
-    def _drop() -> None:
-        import lancedb  # type: ignore[import-untyped]
-
-        db = lancedb.connect(settings.vector_path)
-        if settings.vector_table in db.table_names():
-            db.drop_table(settings.vector_table)
-
-    await asyncio.to_thread(_drop)
+    Routed through the index rather than a separate lancedb connection: two
+    clients mutating one dataset can leave its manifest referencing data files
+    the drop deleted, after which every write fails with a missing-file error.
+    """
+    await get_chunk_index().drop()
 
 
 def build_embedding_index() -> EmbeddingIndex:
@@ -246,33 +252,70 @@ def require_ready(request: Request) -> None:
         )
 
 
-def _build_vector_store() -> LanceDB:
-    # mode="append" is essential: langchain's LanceDB defaults to "overwrite",
-    # which would replace the whole table on every add.
-    return LanceDB(
+@lru_cache
+def get_chunk_index() -> LanceChunkIndex:
+    """The process-wide chunk index.
+
+    Cached deliberately: the adapter holds the LanceDB connection and table
+    handle and serialises writes behind a lock, so one per request would both
+    reconnect constantly and reopen the create-vs-add race the lock exists to
+    close.
+    """
+    return LanceChunkIndex(
         uri=settings.vector_path,
-        embedding=build_embeddings(),
         table_name=settings.vector_table,
-        mode="append",
     )
+
+
+@lru_cache
+def get_embeddings() -> Embeddings:
+    """One embedding client per process; provider clients are reusable."""
+    return build_embeddings()
 
 
 def get_ingestion_service() -> IngestionService:
     return IngestionService(
         meta_store=_meta_store_uow,
-        pipeline=IngestionPipeline(vector_store=_build_vector_store()),
+        pipeline=IngestionPipeline(
+            index=get_chunk_index(),
+            embeddings=get_embeddings(),
+        ),
     )
 
 
 def get_search_service() -> SearchService:
-    # Same vector store (embeddings + table) the corpus was indexed under.
-    return SearchService(vector_store=_build_vector_store())
+    """Retrieval for ``GET/POST /search``: fast by default.
+
+    Reranking is off unless the instance opts in, because a raw lookup should
+    not cost a model call.
+    """
+    return SearchService(
+        index=get_chunk_index(),
+        embeddings=get_embeddings(),
+        chat_model=build_chat_model() if settings.rerank_search else None,
+        mode=settings.search_mode,
+        rerank=settings.rerank_search,
+        rerank_candidates=settings.rerank_candidates,
+    )
 
 
 def get_answer_service() -> AnswerService:
+    """Retrieval + generation, reranked by default.
+
+    The request already pays for a model call, and the order of the passages
+    decides what the answer gets built from.
+    """
+    chat_model = build_chat_model()
     return AnswerService(
-        search=SearchService(vector_store=_build_vector_store()),
-        chat_model=build_chat_model(),
+        search=SearchService(
+            index=get_chunk_index(),
+            embeddings=get_embeddings(),
+            chat_model=chat_model,
+            mode=settings.search_mode,
+            rerank=settings.rerank_answers,
+            rerank_candidates=settings.rerank_candidates,
+        ),
+        chat_model=chat_model,
     )
 
 
@@ -298,21 +341,6 @@ async def get_project_service() -> AsyncIterator[ProjectService]:
 
 
 @asynccontextmanager
-async def _user_store_uow() -> AsyncGenerator[UserStore]:
-    async with get_session() as session:
-        yield SqlUserStore(session)
-
-
-async def bootstrap_owner() -> None:
-    """Create the configured owner account at startup if it doesn't exist."""
-    await ensure_owner(
-        user_store_uow=_user_store_uow,
-        email=settings.owner_email,
-        password=settings.owner_password,
-    )
-
-
-@asynccontextmanager
 async def _connector_store_uow() -> AsyncGenerator[ConnectorStore]:
     """One committed unit of work over the connector store."""
     async with get_session() as session:
@@ -324,6 +352,18 @@ def get_connector_manager() -> ConnectorManager:
         store_uow=_connector_store_uow,
         importer=ConnectorService(documents_uow=_document_service_uow),
     )
+
+
+async def get_directory_stores() -> (
+    AsyncIterator[tuple[UserStore, ProjectStore]]
+):
+    """User and project stores on one session, for the user directory.
+
+    The directory reads accounts and the memberships that decide who may see
+    them; one session keeps that a single consistent read.
+    """
+    async with get_session() as session:
+        yield SqlUserStore(session), SqlProjectStore(session)
 
 
 async def get_user_store() -> AsyncIterator[UserStore]:

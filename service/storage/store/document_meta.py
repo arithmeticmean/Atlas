@@ -3,7 +3,7 @@
 from abc import ABC, abstractmethod
 from datetime import datetime
 
-from models import DocumentMetadata
+from service.models import DocumentMetadata
 
 
 class DocumentMetaStore(ABC):

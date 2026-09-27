@@ -10,9 +10,9 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from models import DocumentMetadata
-from storage.sql.models import DocumentMeta
-from storage.store.document_meta import DocumentMetaStore
+from service.models import DocumentMetadata
+from service.storage.sql.models import DocumentMeta
+from service.storage.store.document_meta import DocumentMetaStore
 
 
 class SqlDocumentMetaStore(DocumentMetaStore):

@@ -29,6 +29,10 @@ export default function Workspace({ route, navigate }) {
   const { user, signOut } = useAuth()
   const [projects, setProjects] = useState(null) // null = loading
   const [ready, setReady] = useState(null)
+  // The chat's source rail. Lives here rather than in Chat so the toggle can
+  // sit in the page header beside the title, and so collapsing it survives
+  // navigating away from chat and back.
+  const [railOpen, setRailOpen] = useState(true)
 
   const reloadProjects = async () => {
     const projs = await api.listProjects()
@@ -89,6 +93,9 @@ export default function Workspace({ route, navigate }) {
   const Page = active.component
 
   const showChat = active.id === 'chat' && projects && selected
+  // Members uses the same roster-plus-rail layout as chat, so it needs the
+  // full height too rather than the padded, centred scroll container.
+  const showMembers = active.id === 'members' && projects && selected
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -143,6 +150,20 @@ export default function Workspace({ route, navigate }) {
               {selected.name}
             </span>
           )}
+          {showChat && (
+            <>
+              <div className="flex-1" />
+              <button
+                type="button"
+                onClick={() => setRailOpen((v) => !v)}
+                aria-expanded={railOpen}
+                className="inline-flex items-center gap-2 text-[12.5px] text-dim bg-elev-2 border border-line-2 rounded-lg px-2.5 py-1.5 hover:border-accent hover:text-ink transition cursor-pointer"
+              >
+                <PanelIcon />
+                {railOpen ? 'Hide sources' : 'Show sources'}
+              </button>
+            </>
+          )}
         </div>
 
         {ready && !ready.ready && (
@@ -165,7 +186,16 @@ export default function Workspace({ route, navigate }) {
         {showChat ? (
           // Chat owns the full height: it scrolls its own transcript and pins
           // the composer to the bottom (Claude-style).
-          <Chat projectId={selected.id} project={selected} ready={ready} />
+          <Chat
+            projectId={selected.id}
+            project={selected}
+            railOpen={railOpen}
+            onOpenDocuments={() =>
+              navigate(projectPath(selected.id, 'documents'))
+            }
+          />
+        ) : showMembers ? (
+          <Members project={selected} />
         ) : (
           <div className="flex-1 min-h-0 overflow-y-auto">
             <div className="p-6 max-w-[900px] w-full mx-auto">
@@ -183,6 +213,16 @@ export default function Workspace({ route, navigate }) {
         )}
       </main>
     </div>
+  )
+}
+
+function PanelIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
+      strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M15 4v16" />
+    </svg>
   )
 }
 

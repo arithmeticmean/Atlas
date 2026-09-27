@@ -9,18 +9,16 @@ and the API from one origin, no nginx/static server needed.
 import asyncio
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from api.dependencies import (
-    bootstrap_owner,
+from service.api.dependencies import (
     build_embedding_index,
     build_ingestion_worker,
 )
-from api.routes import (
+from service.api.routes import (
     answer_router,
     auth_router,
     connectors_router,
@@ -28,11 +26,28 @@ from api.routes import (
     health_router,
     projects_router,
     search_router,
+    users_router,
 )
-from config import settings
-from service.llm import check_chat_model
+from service.config import settings
+from service.core.llm import check_chat_model
+from service.storage.sql.migrate import upgrade_to_head
 
-_SERVICE_ROOT = Path(__file__).resolve().parents[1]
+
+def _require_signing_secret() -> None:
+    """Refuse to serve without a token-signing secret.
+
+    An empty secret is the uninitialized state, not a usable default: every
+    issued JWT would be forgeable by anyone who guessed it. Failing loudly here
+    beats an instance that looks healthy and is not.
+    """
+    if settings.jwt_secret:
+        return
+    raise RuntimeError(
+        "no jwt_secret is configured, so access tokens cannot be signed "
+        "safely. Run `atlas init` to create an instance (it generates one), "
+        "or set ATLAS_JWT_SECRET to a long random value."
+    )
+
 
 _API_ROUTERS = (
     health_router,
@@ -42,19 +57,27 @@ _API_ROUTERS = (
     search_router,
     answer_router,
     connectors_router,
+    users_router,
 )
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
-    """Provision the embedding index, then run the background worker.
+    """Bring the instance up: schema, embedding index, then the worker.
 
-    ``prepare()`` probes the embedding provider (fail-fast if unreachable) and
-    starts an in-place reindex if the configured model changed. The worker is
-    built afterwards so its vector store points at the freshly wiped table, and
-    it reports progress back so the index can detect when a reindex drains.
+    Migrations run first (an installed Atlas owns its own schema -- see
+    storage/sql/migrate.py). ``prepare()`` then probes the embedding provider
+    (fail-fast if unreachable) and starts an in-place reindex if the configured
+    model changed. The worker is built afterwards so its vector store points at
+    the freshly wiped table, and it reports progress back so the index can
+    detect when a reindex drains.
     """
-    await bootstrap_owner()  # create the configured owner if it's missing
+    _require_signing_secret()
+
+    if settings.auto_migrate:
+        # An installed instance has no `alembic` on PATH, so the application
+        # owns its own schema. Idempotent, so this is a no-op once current.
+        await asyncio.to_thread(upgrade_to_head)
 
     index = build_embedding_index()
     await index.prepare()
@@ -73,16 +96,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         await task
 
 
-def _resolve_frontend_dir() -> Path:
-    frontend = Path(settings.frontend_dir)
-    if not frontend.is_absolute():
-        frontend = _SERVICE_ROOT / frontend
-    return frontend.resolve()
-
-
 def _mount_frontend(app: FastAPI) -> None:
     """Serve the built SPA at ``/`` (no-op if it hasn't been built)."""
-    frontend = _resolve_frontend_dir()
+    frontend = settings.resolved_frontend_dir()
     if not frontend.is_dir():
         return
 
@@ -105,8 +121,18 @@ def _mount_frontend(app: FastAPI) -> None:
         return FileResponse(frontend / "index.html")
 
 
+def _version() -> str:
+    """The installed distribution's version, for the OpenAPI document."""
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        return version("atlas")
+    except PackageNotFoundError:
+        return "0.0.0+unknown"
+
+
 def create_app() -> FastAPI:
-    app = FastAPI(title="Atlas", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="Atlas", version=_version(), lifespan=lifespan)
     for router in _API_ROUTERS:
         app.include_router(router, prefix="/api")
     _mount_frontend(app)

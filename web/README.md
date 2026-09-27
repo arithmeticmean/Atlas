@@ -21,17 +21,21 @@ Open http://localhost:5173.
 ## Build (served by FastAPI, no nginx)
 
 ```bash
-npm run build          # emits ./dist
+npm run build          # emits ../service/web
 ```
 
-The backend serves `dist/` automatically: `settings.frontend_dir` defaults to
-`../web/dist` (resolved from the service root). So in production just run the
-backend and it serves both the UI and the API on one origin:
+The build writes straight into the Python package, which is both where
+`settings.frontend_dir` points and what the wheel ships as package data -- so
+there is exactly one bundle, in one place. FastAPI then serves the UI and the
+API on one origin:
 
 ```bash
-cd ../service && uv run uvicorn api.app:app
-# open http://localhost:8000
+cd .. && uv run atlas serve
+# open http://127.0.0.1:8000
 ```
+
+From the repository root, `python scripts/build_web.py` does the same thing and
+installs npm dependencies first if they are missing.
 
 ## Structure
 

@@ -6,22 +6,27 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from config import settings
-from storage.sql import models as _models  # noqa: F401  (populate metadata)
-from storage.sql.db import Base
+from service.config import settings
+from service.storage.sql import (
+    models as _models,  # noqa: F401  (populate metadata)
+)
+from service.storage.sql.db import Base
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
 
-config.set_main_option(
-    "sqlalchemy.url",
-    settings.database_url,
-)
+# When Atlas runs migrations itself (storage/sql/migrate.py) it has already set
+# the URL and the script location on this config, and reconfiguring logging
+# here would stomp the running server's handlers. Only take over when this
+# environment was entered from the `alembic` CLI instead.
+_in_process = config.get_main_option("atlas_in_process", "false") == "true"
 
-# Interpret the config file for Python logging.
-# This line sets up loggers basically.
-if config.config_file_name is not None:
+if not config.get_main_option("sqlalchemy.url", ""):
+    config.set_main_option("sqlalchemy.url", settings.database_url)
+
+if not _in_process and config.config_file_name is not None:
+    # Interpret the config file for Python logging.
     fileConfig(config.config_file_name)
 
 # add your model's MetaData object here

@@ -11,7 +11,7 @@ from sqlalchemy.orm import (
     mapped_column,
 )
 
-from storage.sql.db import Base
+from service.storage.sql.db import Base
 
 
 class DocumentMeta(Base):

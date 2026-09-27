@@ -13,8 +13,8 @@ from datetime import UTC, datetime
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from storage.sql.models import IngestionJob
-from storage.store.jobs import ClaimedJob, JobQueue
+from service.storage.sql.models import IngestionJob
+from service.storage.store.jobs import ClaimedJob, JobQueue
 
 
 class SqlJobQueue(JobQueue):

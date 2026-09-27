@@ -7,16 +7,23 @@ and startup stays light.
 
 The embedding *dimension* is not set here or in config -- it is probed from the
 returned model at startup and recorded in the vector store's lock file
-(see :mod:`service.embedding_index`).
+(see :mod:`service.core.embedding_index`).
 """
 
 from langchain_core.embeddings import Embeddings
 from pydantic import SecretStr
 
-from config import settings
+from service.config import Settings, get_settings
 
 
-def build_embeddings() -> Embeddings:
+def build_embeddings(settings: Settings | None = None) -> Embeddings:
+    """Build the configured embedding model.
+
+    ``settings`` defaults to the live instance configuration. ``atlas init``
+    passes a candidate instead, so a model name can be verified before it is
+    written to disk.
+    """
+    settings = settings or get_settings()
     provider = settings.embedding_provider
 
     if provider == "ollama":

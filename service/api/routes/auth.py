@@ -3,12 +3,12 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
-from api.dependencies import (
+from service.api.dependencies import (
     CurrentPrincipal,
     get_auth_service,
     get_signup_services,
 )
-from service import (
+from service.core.auth import (
     AuthService,
     EmailTaken,
     InactiveUser,
@@ -16,8 +16,8 @@ from service import (
     InvalidToken,
     LoginResult,
     PermissionDenied,
-    ProjectService,
 )
+from service.core.projects import ProjectService
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 

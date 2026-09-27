@@ -3,8 +3,12 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
 // In dev, `npm run dev` serves the UI on :5173 and proxies /api to the
-// FastAPI backend on :8000 (so no CORS). In prod, `npm run build` emits
-// dist/, which FastAPI serves itself (settings.frontend_dir -> ../web/dist).
+// FastAPI backend on :8000 (so no CORS).
+//
+// `npm run build` emits straight into the Python package (../service/web),
+// which is where settings.frontend_dir points and what the wheel ships as
+// package data. Building there rather than into a local dist/ and copying
+// keeps one bundle in one place -- two copies drifted silently before.
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
@@ -14,6 +18,8 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: 'dist',
+    outDir: '../service/web',
+    // Required by Vite to clear a directory outside its own root.
+    emptyOutDir: true,
   },
 })

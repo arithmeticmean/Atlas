@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 
-from models import Connector
+from service.models import Connector
 
 
 class ConnectorStore(ABC):

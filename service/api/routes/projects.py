@@ -7,8 +7,9 @@
 * ``/projects/{id}/invites``        mint an invite that creates an account and
                                     joins it to the project (mod)
 
-Authorization comes from :class:`~service.projects.ProjectService`: the global
-owner may act on every project; a project admin moderates their own; a member
+Authorization comes from :class:`~service.core.projects.ProjectService`: the
+global owner may act on every project; a project admin moderates their own; a
+member
 may read. The ``ProjectMemberCtx`` / ``ProjectModeratorCtx`` dependencies apply
 those checks (and 404 an unknown project) before the handler runs.
 """
@@ -19,7 +20,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, Field
 
-from api.dependencies import (
+from service.api.dependencies import (
     CurrentPrincipal,
     ProjectMemberCtx,
     ProjectModeratorCtx,
@@ -27,13 +28,9 @@ from api.dependencies import (
     get_membership_services,
     get_project_service,
 )
-from service import (
-    AuthService,
-    PermissionDenied,
-    ProjectError,
-    ProjectService,
-)
-from storage.store import UserStore
+from service.core.auth import AuthService, PermissionDenied
+from service.core.projects import ProjectError, ProjectService
+from service.storage.store import UserStore
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 

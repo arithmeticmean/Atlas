@@ -17,12 +17,17 @@ htmlcov/
 !.env.example
 
 # --- Runtime data (SQLite DB, LanceDB dataset, blob store) ---
+/data/
 service/data/
 *.db
 *.sqlite3
 
 # --- Launcher run dir (generated env with secrets + all runtime state) ---
 /run/
+
+# --- Build output: wheels/sdists (dist/) and the SPA bundled into the
+# package by the release build (service/web/) ---
+service/web/
 
 # --- Node / Vite (web) ---
 node_modules/

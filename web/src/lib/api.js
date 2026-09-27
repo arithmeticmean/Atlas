@@ -79,6 +79,7 @@ export const api = {
   // --- health / status (global) ---
   ready: () => req('/health/ready'),
   status: () => req('/status'),
+  network: () => req('/network'),
 
   // --- auth ---
   login: (email, password) =>
@@ -89,6 +90,9 @@ export const api = {
       json: body,
     }),
   me: () => req('/auth/me'),
+
+  // --- user directory (scoped server-side to what the caller may see) ---
+  listUsers: () => req('/users'),
 
   // --- projects ---
   listProjects: () => req('/projects'),

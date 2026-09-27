@@ -1,32 +1,38 @@
-"""The RAG ingestion pipeline: load -> split -> index.
+"""The ingestion pipeline: load -> split -> embed -> index.
 
-Pure processing. It knows a blob path and a mime type on the way in, and writes
-chunks into a vector store on the way out. It has no knowledge of the metadata
-store, the database, or the web layer — those are the orchestrator's concern.
-
-With langchain the embed step is not separate: the injected ``VectorStore``
-(langchain's ``LanceDB``) holds the ``Embeddings`` and embeds on ``add``.
+The embed step is now explicit. It used to be implicit inside langchain's
+vector store, which embedded on ``add`` and hid the vectors; the chunk index
+takes ``Chunk`` objects that already carry their embedding, so the same model
+is demonstrably used for indexing and for querying, and hybrid retrieval can
+hand LanceDB the query vector separately from the query text.
 """
 
 import asyncio
+import logging
 
 from langchain_core.documents import Document
+from langchain_core.embeddings import Embeddings
 from langchain_text_splitters import TextSplitter
 
-from storage.store import VectorStore
+from service.models.chunk import Chunk
+from service.storage.store.chunk_index import ChunkIndex
 
 from .loaders import resolve_loader
 from .splitters import build_splitter
+
+logger = logging.getLogger(__name__)
 
 
 class IngestionPipeline:
     def __init__(
         self,
         *,
-        vector_store: VectorStore,
+        index: ChunkIndex,
+        embeddings: Embeddings,
         splitter: TextSplitter | None = None,
     ) -> None:
-        self._vector = vector_store
+        self._index = index
+        self._embeddings = embeddings
         self._splitter = splitter or build_splitter()
 
     async def run(
@@ -38,28 +44,49 @@ class IngestionPipeline:
         mime_type: str | None,
         filename: str | None = None,
     ) -> int:
-        """Load, split, and index a stored document; return the chunk count.
+        """Load, split, embed and index one stored document.
 
-        ``project_id`` is stamped on every chunk's metadata so search can be
-        filtered to one project (chunks share a single vector table).
+        Returns the number of chunks written. Re-ingesting replaces: every
+        chunk of this document is deleted first, so a document that shrank does
+        not leave orphaned passages behind to be retrieved later.
         """
-        # Loading and splitting are sync/blocking (and loader resolution may
-        # sniff the file); keep the whole CPU/IO-bound part off the loop.
+        # Loading and splitting are blocking (and loader resolution sniffs the
+        # file), so keep that whole part off the event loop.
         docs = await asyncio.to_thread(
             self._load_and_split,
             source_path=source_path,
             mime_type=mime_type,
             filename=filename,
         )
+        texts = [d.page_content for d in docs if d.page_content.strip()]
 
-        for index, chunk in enumerate(docs):
-            chunk.metadata["document_id"] = document_id
-            chunk.metadata["project_id"] = project_id
-            chunk.metadata["chunk_index"] = index
+        await self._index.delete_document(document_id)
+        if not texts:
+            logger.info("document %s produced no text to index", document_id)
+            return 0
 
-        if docs:
-            await self._vector.aadd_documents(docs)
-        return len(docs)
+        vectors = await self._embeddings.aembed_documents(texts)
+        if len(vectors) != len(texts):
+            raise RuntimeError(
+                f"embedding returned {len(vectors)} vectors for "
+                f"{len(texts)} chunks"
+            )
+
+        await self._index.add(
+            [
+                Chunk(
+                    document_id=document_id,
+                    project_id=project_id,
+                    chunk_index=i,
+                    text=text,
+                    vector=vector,
+                )
+                for i, (text, vector) in enumerate(
+                    zip(texts, vectors, strict=True)
+                )
+            ]
+        )
+        return len(texts)
 
     def _load_and_split(
         self,

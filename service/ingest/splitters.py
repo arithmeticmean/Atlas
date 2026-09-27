@@ -5,7 +5,7 @@ from langchain_text_splitters import (
     TextSplitter,
 )
 
-from config import settings
+from service.config import settings
 
 
 def build_splitter() -> TextSplitter:

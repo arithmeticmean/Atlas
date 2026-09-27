@@ -3,9 +3,9 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from models import User
-from storage.sql.models import User as OrmUser
-from storage.store.user import UserStore
+from service.models import User
+from service.storage.sql.models import User as OrmUser
+from service.storage.store.user import UserStore
 
 
 class SqlUserStore(UserStore):
@@ -28,6 +28,14 @@ class SqlUserStore(UserStore):
     async def get_by_id(self, user_id: str) -> User | None:
         row = await self._session.get(OrmUser, user_id)
         return _to_domain(row) if row is not None else None
+
+    async def list_all(self) -> list[User]:
+        rows = (
+            await self._session.execute(
+                select(OrmUser).order_by(OrmUser.created_at)
+            )
+        ).scalars()
+        return [_to_domain(row) for row in rows]
 
 
 def _to_orm(user: User) -> OrmUser:

@@ -4,7 +4,7 @@ from typing import Any
 from sqlalchemy import JSON, Boolean, DateTime, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
-from storage.sql.db import Base
+from service.storage.sql.db import Base
 
 
 class Connector(Base):

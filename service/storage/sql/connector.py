@@ -3,9 +3,9 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from models import Connector
-from storage.sql.models import Connector as OrmConnector
-from storage.store.connector import ConnectorStore
+from service.models import Connector
+from service.storage.sql.models import Connector as OrmConnector
+from service.storage.store.connector import ConnectorStore
 
 
 class SqlConnectorStore(ConnectorStore):

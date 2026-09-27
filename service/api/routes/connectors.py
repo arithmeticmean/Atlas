@@ -13,18 +13,18 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, ConfigDict, Field
 
-from api.dependencies import (
+from service.api.dependencies import (
     ProjectModeratorCtx,
     get_connector_manager,
     require_ready,
 )
-from models import Connector
-from service import (
+from service.core.connector_manager import (
     ConnectorManager,
     InvalidConnectorConfig,
     SyncResult,
     UnknownConnector,
 )
+from service.models import Connector
 
 router = APIRouter(
     prefix="/projects/{project_id}/connectors", tags=["connectors"]

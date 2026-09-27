@@ -11,7 +11,7 @@ import hashlib
 from pathlib import Path
 from typing import BinaryIO
 
-from storage.store.document import DocumentStore, StoredBlob
+from service.storage.store.document import DocumentStore, StoredBlob
 
 _READ_SIZE = 1024 * 1024
 

@@ -1,18 +1,23 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { api } from '../lib/api.js'
-import { appOrigin, inviteLink, isLoopbackHost } from '../lib/net.js'
-import { Badge, Button, Card, Spinner, inputCls } from './ui.jsx'
+import { useAuth } from '../lib/auth.jsx'
+import { Avatar } from './Avatar.jsx'
+import MemberRail from './MemberRail.jsx'
+import { Badge, Button, Spinner, cx } from './ui.jsx'
 
-const TH = 'text-left px-2 py-2.5 border-b border-line text-[11px] uppercase tracking-wide text-faint font-semibold'
-const TD = 'text-left px-2 py-2.5 border-b border-line text-[13px] align-top'
-
-// Project membership management (moderators only). Add existing users by email,
-// remove them, or mint an invite link that both creates a new account and joins
-// it to this project.
+// Project membership, laid out like the chat: the roster keeps the left, and
+// whatever you are doing with it happens in a rail on the right. Selecting a
+// person shows their detail; with nobody selected the rail is the add flow, so
+// the primary action is always on screen without a popover or a modal.
 export default function Members({ project }) {
   const pid = project.id
   const isOwner = project.role === 'owner'
-  const [members, setMembers] = useState([])
+  const canModerate = isOwner || project.role === 'admin'
+  const { user } = useAuth()
+
+  const [members, setMembers] = useState(null) // null = loading
+  const [selectedId, setSelectedId] = useState(null)
+  const [net, setNet] = useState(null)
   const [error, setError] = useState('')
 
   const refresh = async () => {
@@ -23,229 +28,156 @@ export default function Members({ project }) {
       setError(e.message)
     }
   }
-  useEffect(() => { refresh() }, [pid])
+
+  useEffect(() => {
+    setMembers(null)
+    setSelectedId(null)
+    refresh()
+  }, [pid])
+
+  useEffect(() => {
+    let live = true
+    api
+      .network()
+      .then((n) => live && setNet(n))
+      .catch(() => {
+        /* reachability is informational; the panel copes without it */
+      })
+    return () => {
+      live = false
+    }
+  }, [])
+
+  const selected = useMemo(
+    () => (members || []).find((m) => m.user_id === selectedId) || null,
+    [members, selectedId],
+  )
+  const memberIds = useMemo(
+    () => new Set((members || []).map((m) => m.user_id)),
+    [members],
+  )
 
   return (
-    <div>
-      <AccessNote />
-      <AddMember pid={pid} isOwner={isOwner} onAdded={refresh} />
-      <InviteBox pid={pid} isOwner={isOwner} />
+    <div className="flex-1 min-h-0 flex">
+      <div className="flex-1 min-w-0 flex flex-col">
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <div className="px-6 py-6 max-w-[720px]">
+            <div className="flex items-center gap-3">
+              <h2 className="text-[20px] font-semibold tracking-tight">
+                {members === null
+                  ? 'People'
+                  : `${members.length} ${members.length === 1 ? 'person' : 'people'}`}
+              </h2>
+              <div className="flex-1" />
+              {canModerate && (
+                <Button
+                  variant={selectedId === null ? 'primary' : 'default'}
+                  size="sm"
+                  onClick={() => setSelectedId(null)}
+                >
+                  Add someone
+                </Button>
+              )}
+            </div>
 
-      {error && <div className="text-bad text-[13px] mt-3">{error}</div>}
+            {error && <div className="text-bad text-[13px] mt-3">{error}</div>}
 
-      <Card className="mt-3.5">
-        <div className="flex items-center justify-between">
-          <strong>{members.length} member{members.length === 1 ? '' : 's'}</strong>
-          <Button size="sm" onClick={refresh}>Refresh</Button>
-        </div>
-        <table className="w-full border-collapse mt-3">
-          <thead>
-            <tr><th className={TH}>User</th><th className={TH}>Role</th><th className={TH}></th></tr>
-          </thead>
-          <tbody>
-            {members.map((m) => (
-              <tr key={m.user_id} className="transition hover:bg-white/[0.02]">
-                <td className={TD}>
-                  {m.email || <span className="text-dim">unknown</span>}
-                  <div className="font-mono text-xs text-dim break-all">{m.username || m.user_id}</div>
-                </td>
-                <td className={TD}>
-                  <Badge tone={m.role === 'admin' ? 'ok' : 'dim'}>{m.role}</Badge>
-                </td>
-                <td className={TD}>
-                  <RemoveButton pid={pid} member={m} onRemoved={refresh} />
-                </td>
-              </tr>
-            ))}
-            {members.length === 0 && (
-              <tr><td colSpan="3" className={`${TD} text-dim`}>No members yet.</td></tr>
+            {members === null ? (
+              <div className="flex items-center gap-2 text-dim text-[13px] mt-5">
+                <Spinner /> loading members…
+              </div>
+            ) : members.length === 0 ? (
+              <p className="text-dim text-[13px] mt-4 leading-relaxed">
+                Nobody has been added to this project yet. The instance owner
+                can always reach every project, which is why they are not
+                listed here.
+              </p>
+            ) : (
+              <div className="mt-4 flex flex-col gap-1">
+                {members.map((m) => {
+                  const on = m.user_id === selectedId
+                  return (
+                    <button
+                      key={m.user_id}
+                      type="button"
+                      aria-current={on ? 'true' : undefined}
+                      onClick={() => setSelectedId(m.user_id)}
+                      className={cx(
+                        'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl',
+                        'text-left transition cursor-pointer border',
+                        on
+                          ? 'bg-accent/10 border-accent/40'
+                          : 'bg-transparent border-transparent hover:bg-white/[0.03]',
+                      )}
+                    >
+                      <Avatar email={m.email || m.user_id} size={30} />
+                      <span className="flex-1 min-w-0">
+                        <span className="flex items-center gap-2">
+                          <span className="text-[13.5px] truncate">
+                            {m.email || 'unknown'}
+                          </span>
+                          {m.user_id === user?.user_id && (
+                            <span className="text-[10px] uppercase tracking-wide text-faint border border-line rounded px-1.5 py-px shrink-0">
+                              you
+                            </span>
+                          )}
+                        </span>
+                        {m.username && (
+                          <span className="block text-[11.5px] text-dim truncate mt-0.5">
+                            {m.username}
+                          </span>
+                        )}
+                      </span>
+                      <Badge tone={m.role === 'admin' ? 'ok' : 'dim'}>
+                        {m.role}
+                      </Badge>
+                    </button>
+                  )
+                })}
+              </div>
             )}
-          </tbody>
-        </table>
-      </Card>
-    </div>
-  )
-}
-
-function AddMember({ pid, isOwner, onAdded }) {
-  const [email, setEmail] = useState('')
-  const [role, setRole] = useState('member')
-  const [error, setError] = useState('')
-  const [busy, setBusy] = useState(false)
-
-  const submit = async () => {
-    setBusy(true); setError('')
-    try {
-      await api.addMember(pid, email.trim(), role)
-      setEmail('')
-      onAdded()
-    } catch (e) {
-      setError(e.message)
-    }
-    setBusy(false)
-  }
-
-  return (
-    <Card>
-      <strong>Add an existing user</strong>
-      <div className="flex items-center gap-2.5 mt-3">
-        <input className={inputCls} value={email} type="email" placeholder="their email"
-          onChange={(e) => setEmail(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && submit()} />
-        <select className={`${inputCls} w-[130px]`} value={role} onChange={(e) => setRole(e.target.value)}>
-          <option value="member">member</option>
-          {isOwner && <option value="admin">admin</option>}
-        </select>
-        <Button variant="primary" onClick={submit} disabled={busy || !email.trim()}>
-          {busy ? <Spinner /> : 'Add'}
-        </Button>
-      </div>
-      {error && <div className="text-bad text-[13px] mt-3">{error}</div>}
-      <div className="text-dim text-xs mt-3">
-        The user must already have an account. To onboard someone new, use an
-        invite below.
-      </div>
-    </Card>
-  )
-}
-
-function InviteBox({ pid, isOwner }) {
-  const [role, setRole] = useState('member')
-  const [token, setTok] = useState('')
-  const [error, setError] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [copied, setCopied] = useState('')
-
-  const mint = async () => {
-    setBusy(true); setError(''); setCopied('')
-    try {
-      const res = await api.createInvite(pid, role)
-      setTok(res.invite_token)
-    } catch (e) {
-      setError(e.message)
-    }
-    setBusy(false)
-  }
-
-  const copy = async (what, value) => {
-    try {
-      await navigator.clipboard.writeText(value)
-      setCopied(what)
-    } catch {
-      /* clipboard blocked; the field is selectable */
-    }
-  }
-
-  const link = token ? inviteLink(token) : ''
-  const loopback = isLoopbackHost()
-
-  return (
-    <Card className="mt-3.5">
-      <strong>Invite a new user</strong>
-      <div className="flex items-center gap-2.5 mt-3">
-        <select className={`${inputCls} w-[130px]`} value={role} onChange={(e) => setRole(e.target.value)}>
-          <option value="member">member</option>
-          {isOwner && <option value="admin">admin</option>}
-        </select>
-        <Button variant="primary" onClick={mint} disabled={busy}>
-          {busy ? <Spinner /> : 'Generate invite'}
-        </Button>
-      </div>
-      {error && <div className="text-bad text-[13px] mt-3">{error}</div>}
-      {token && (
-        <div className="mt-3">
-          <div className="text-dim text-xs">
-            Send this link — it opens the sign-up form prefilled. The invite
-            expires shortly.
           </div>
-          <div className="flex items-center gap-2.5 mt-3">
-            <input className={`${inputCls} font-mono`} readOnly value={link}
-              onFocus={(e) => e.target.select()} />
-            <Button onClick={() => copy('link', link)}>
-              {copied === 'link' ? 'Copied' : 'Copy link'}
-            </Button>
-          </div>
-          {loopback ? (
-            <div className="rounded-lg px-3 py-2.5 text-[12.5px] leading-relaxed mt-2.5 bg-warn/[0.13] border border-warn/30 text-[#f4d488]">
-              This link points at <span className="font-mono">{appOrigin()}</span>,
-              which only works on this computer. To invite someone on another
-              device, open Atlas here using this machine’s network address
-              (e.g. <span className="font-mono">http://192.168.x.x:8000</span>), then
-              generate the invite again — see “Access from other devices” above.
-            </div>
+        </div>
+
+        <div className="shrink-0 border-t border-line px-6 py-3 flex items-center gap-2.5">
+          <span
+            className={cx(
+              'w-1.5 h-1.5 rounded-full shrink-0',
+              net && !net.loopback_only ? 'bg-ok' : 'bg-warn',
+            )}
+          />
+          {net === null ? (
+            <span className="text-[11.5px] text-dim">checking reachability…</span>
+          ) : net.loopback_only ? (
+            <span className="text-[11.5px] text-dim">
+              This device only — others cannot reach this instance yet
+            </span>
+          ) : net.addresses.length ? (
+            <>
+              <span className="text-[11.5px] text-dim">Reachable at</span>
+              <span className="font-mono text-[11.5px] text-[#b9c2d2] select-all">
+                {net.addresses[0]}:{net.port}
+              </span>
+            </>
           ) : (
-            <div className="text-dim text-xs mt-3">
-              Anyone on your network can open this link directly.
-            </div>
+            <span className="text-[11.5px] text-dim">
+              Bound to {net.bound_host}:{net.port}
+            </span>
           )}
-          <details className="mt-3">
-            <summary className="text-dim text-xs cursor-pointer">
-              or share just the token (paste under “Have an invite?”)
-            </summary>
-            <div className="flex items-center gap-2.5 mt-3">
-              <input className={`${inputCls} font-mono`} readOnly value={token}
-                onFocus={(e) => e.target.select()} />
-              <Button onClick={() => copy('token', token)}>
-                {copied === 'token' ? 'Copied' : 'Copy'}
-              </Button>
-            </div>
-          </details>
         </div>
-      )}
-    </Card>
-  )
-}
-
-// How other devices reach this instance. Purely derived from the browser's
-// current address, because the server (in Docker) can't know the host's LAN IP.
-function AccessNote() {
-  const origin = appOrigin()
-  const loopback = isLoopbackHost()
-  return (
-    <Card>
-      <div className="flex items-center justify-between">
-        <strong>Access from other devices</strong>
-        <Badge tone={loopback ? 'warn' : 'ok'}>
-          {loopback ? 'this device only' : 'network-reachable'}
-        </Badge>
       </div>
-      {loopback ? (
-        <div className="text-dim text-xs mt-3 leading-relaxed">
-          You’re viewing Atlas at <span className="font-mono">{origin}</span>, so
-          other devices can’t reach it and invite links won’t work off this
-          machine. Find this computer’s network IP —{' '}
-          <span className="font-mono">hostname -I</span> (Linux/macOS) or{' '}
-          <span className="font-mono">ipconfig</span> (Windows) — then open Atlas at{' '}
-          <span className="font-mono">http://&lt;that-ip&gt;:8000</span>. Everyone on
-          the same Wi-Fi/LAN can use that address; invites generated from it will
-          just work.
-        </div>
-      ) : (
-        <div className="text-dim text-xs mt-3 leading-relaxed">
-          Other devices on the same network can open Atlas at{' '}
-          <span className="font-mono">{origin}</span>. Invite links you generate below
-          use this address, so they’ll open directly on any device here.
-        </div>
-      )}
-    </Card>
-  )
-}
 
-function RemoveButton({ pid, member, onRemoved }) {
-  const [busy, setBusy] = useState(false)
-  const remove = async () => {
-    if (!confirm(`Remove ${member.email || member.user_id} from this project?`)) return
-    setBusy(true)
-    try {
-      await api.removeMember(pid, member.user_id)
-      onRemoved()
-    } finally {
-      setBusy(false)
-    }
-  }
-  return (
-    <Button variant="danger" size="sm" onClick={remove} disabled={busy}>
-      {busy ? <Spinner /> : 'Remove'}
-    </Button>
+      <MemberRail
+        pid={pid}
+        selected={selected}
+        canModerate={canModerate}
+        isOwner={isOwner}
+        isSelf={selected?.user_id === user?.user_id}
+        net={net}
+        memberIds={memberIds}
+        onChanged={refresh}
+        onCleared={() => setSelectedId(null)}
+      />
+    </div>
   )
 }

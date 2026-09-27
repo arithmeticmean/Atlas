@@ -4,10 +4,10 @@ from sqlalchemy import delete as sa_delete
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from models import Project, ProjectMember
-from storage.sql.models import Project as OrmProject
-from storage.sql.models import ProjectMember as OrmMember
-from storage.store.project import ProjectStore
+from service.models import Project, ProjectMember
+from service.storage.sql.models import Project as OrmProject
+from service.storage.sql.models import ProjectMember as OrmMember
+from service.storage.store.project import ProjectStore
 
 
 class SqlProjectStore(ProjectStore):

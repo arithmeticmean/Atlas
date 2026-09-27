@@ -5,6 +5,7 @@ from .documents import router as documents_router
 from .health import router as health_router
 from .projects import router as projects_router
 from .search import router as search_router
+from .users import router as users_router
 
 __all__ = [
     "answer_router",
@@ -14,4 +15,5 @@ __all__ = [
     "health_router",
     "projects_router",
     "search_router",
+    "users_router",
 ]

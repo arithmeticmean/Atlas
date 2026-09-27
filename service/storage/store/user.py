@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 
-from models import User
+from service.models import User
 
 
 class UserStore(ABC):
@@ -17,3 +17,11 @@ class UserStore(ABC):
     @abstractmethod
     async def get_by_id(self, user_id: str) -> User | None:
         """Return the user with this id, or ``None`` (for member listings)."""
+
+    @abstractmethod
+    async def list_all(self) -> list[User]:
+        """Every account, oldest first.
+
+        The caller is responsible for narrowing this to what the requester may
+        see -- see ``service.core.directory``.
+        """

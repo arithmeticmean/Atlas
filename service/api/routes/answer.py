@@ -20,12 +20,12 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from api.dependencies import (
+from service.api.dependencies import (
     ProjectMemberCtx,
     get_answer_service,
     require_ready,
 )
-from service import AnswerService
+from service.core.answer import AnswerService
 
 router = APIRouter(prefix="/projects/{project_id}/answer", tags=["answer"])
 

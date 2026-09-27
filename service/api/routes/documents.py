@@ -4,12 +4,12 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel, ConfigDict
 
-from api.dependencies import (
+from service.api.dependencies import (
     ProjectMemberCtx,
     get_document_service,
     require_ready,
 )
-from service import DocumentService
+from service.core.document import DocumentService
 
 # Documents live under a project; every route requires membership (the
 # ProjectMemberCtx dependency 404s an unknown project and 403s a non-member).
