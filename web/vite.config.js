@@ -5,7 +5,7 @@ import tailwindcss from '@tailwindcss/vite'
 // In dev, `npm run dev` serves the UI on :5173 and proxies /api to the
 // FastAPI backend on :8000 (so no CORS).
 //
-// `npm run build` emits straight into the Python package (../service/web),
+// `npm run build` emits straight into the Python package (src/atlas/static),
 // which is where settings.frontend_dir points and what the wheel ships as
 // package data. Building there rather than into a local dist/ and copying
 // keeps one bundle in one place -- two copies drifted silently before.
@@ -18,7 +18,7 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: '../service/web',
+    outDir: '../src/atlas/static',
     // Required by Vite to clear a directory outside its own root.
     emptyOutDir: true,
   },

@@ -1,156 +1,205 @@
 # Atlas
 
-Self-hosted, source-grounded RAG over your own documents. One process serves
-both a JSON API and a React UI; answers stream back with citations to the
-passages they came from.
+Chat with your documents on your own server.
 
-Atlas runs entirely on your machine: SQLite for metadata, LanceDB for chunk
-vectors, the raw files on local disk, and your choice of embedding/answering
-model — local Ollama by default, or any hosted provider (OpenAI, Anthropic, or
-anything speaking the OpenAI API: Kimi, Groq, DeepSeek, …).
+Atlas is a self-hosted knowledge assistant. Upload files, invite your team, and
+talk to it like a normal AI assistant. When your documents help, answers cite
+the exact passages they came from. When they don't, Atlas answers from general
+knowledge, with no citation.
 
-## Install
+One process serves the web app and the API. Your files, search index and chats
+stay in one folder on your machine.
+
+## Features
+
+- **Chat with sources:** streaming answers, clickable citations, stop,
+  regenerate, feedback, pinned and archived chats, Markdown export.
+- **Any model:** Ollama, OpenAI, Anthropic, Google, or any OpenAI-compatible
+  API such as Kimi, LM Studio, vLLM or OpenRouter.
+- **Documents:** drag-and-drop upload, live indexing status, tags, filters and
+  a preview of what Atlas read.
+- **Teams:** separate projects, member roles and invite links. Chats are
+  private to the person who started them.
+- **Connectors:** import web pages and Google Drive files.
+- **Safe defaults:** API keys are encrypted, and credential files such as
+  `.env` and `.pem` are never indexed.
+
+## Quick start
+
+You need [uv](https://docs.astral.sh/uv/) and [Node.js](https://nodejs.org/).
+Node is only used to build the web app.
 
 ```bash
-uv tool install atlas          # or: pipx install atlas
-atlas init                     # pick providers/models, create the owner account
-atlas                          # -> http://127.0.0.1:8000
+git clone <your-repo-url> atlas
+cd atlas
+uv sync
+uv run atlas
 ```
 
-From a checkout, build and install it yourself (see **Build the CLI** below).
+Then:
 
-`atlas init` is interactive; pass `--non-interactive` with the options from
-`atlas init --help` to script it.
+1. Open <http://127.0.0.1:8000>.
+2. Copy the **setup token** printed in the terminal and create the owner
+   account. A new token is printed each time Atlas starts until setup is done.
+3. Connect a **chat model** and an **embedding model**.
+4. Create a project, add documents and start chatting.
 
-**Model names are free text** — whatever your provider calls them, not a menu
-of a handful that would go stale. Before writing anything, `atlas init`
-contacts both the embedding model and the chat model, so a typo, a missing API
-key, an unpulled Ollama model or an unreachable endpoint fails right there:
+## Choosing models
 
-```
-── Checking providers ────────────────────────
+Atlas uses two models, and they can come from different providers:
 
-  ✓ embedding: ollama/nomic-embed-text 768 dimensions
-  ✗ llm: ollama/llama3.2 model not pulled
-    Ollama is reachable but has not pulled 'llama3.2'. Run `ollama pull
-    llama3.2`. Currently pulled: llama3.1, nomic-embed-text.
+- The **chat model** writes the answers.
+- The **embedding model** makes your documents searchable by meaning.
 
-error: provider checks failed -- nothing was written.
-```
+| Provider | What to enter | Good for |
+|---|---|---|
+| Ollama | Address, usually `http://localhost:11434` | Private, free, local |
+| OpenAI, Google | API key | Chat and embeddings |
+| Anthropic | API key | Chat only |
+| OpenAI-compatible | Server address, API key if needed | Kimi, LM Studio, vLLM, OpenRouter |
 
-A failed check leaves no instance directory at all — there is nothing to clean
-up. Pass `--skip-checks` to configure a machine before its provider is running.
+For a fully local setup, pull the models before connecting them:
 
-The embedding dimension reported on success is what gets recorded in the index
-lock file; changing the embedding model later forces a full reindex.
-
-Everything Atlas owns lives in one directory — **`ATLAS_HOME`, default
-`~/.atlas`**:
-
-```
-~/.atlas/
-  config.toml     providers, models, server bind   (safe to read or share)
-  secrets.toml    API keys + token signing secret  (0600)
-  atlas.db        SQLite: users, projects, document metadata, job queue
-  lance/          LanceDB: chunk text + vectors
-  blobs/          your documents, as uploaded
-  logs/
+```bash
+ollama pull nomic-embed-text
+ollama pull llama3.1
 ```
 
-Back it up, move it to another machine, or delete it — one directory, one
-operation. Nothing is written relative to the directory you happened to launch
-from, and `atlas serve` applies its own migrations at startup.
+To use Kimi, choose **OpenAI-compatible**, enter `https://api.moonshot.ai/v1`
+and your API key, then pick a model such as `kimi-k2.6`.
 
-Any setting can be overridden per-run by an `ATLAS_`-prefixed environment
-variable (`ATLAS_LLM_MODEL=gpt-4o atlas serve`). Run `atlas home` to see where
-an instance lives and what it contains.
+Changing the embedding model re-indexes every document. Uploads and answers
+pause until that finishes.
 
-## Commands
+### Speed
 
-| | |
+- **Indexing** time is mostly the embedding model. On a laptop CPU with
+  `nomic-embed-text`, expect roughly 0.3 seconds per passage, or about 4 to 5
+  minutes for a 330-page PDF. A GPU or a hosted embedding model is much faster.
+- **Chat** speed depends on the chat model. **Deep thinking** is off by default
+  for Kimi K2.6 because it can add a minute or more. Turn it on under
+  **Settings → Answers & documents**.
+
+## Supported files
+
+| Type | Extensions |
 |---|---|
-| `atlas init` | Create an instance: config, database, owner account |
-| `atlas` / `atlas serve` | Run the API + web UI (`--host`, `--port`, `--reload`) |
-| `atlas build-web` | Build the web UI (a checkout only; `serve` does it for you) |
-| `atlas migrate` | Apply pending migrations (startup does this too) |
-| `atlas home` | Show the instance directory and its contents |
-| `atlas version` | Print the installed version |
+| Documents | `.pdf` `.html` `.htm` `.md` `.markdown` `.rst` `.tex` `.txt` `.log` |
+| Data and config | `.csv` `.tsv` `.json` `.jsonl` `.xml` `.yaml` `.yml` `.toml` `.ini` `.cfg` `.conf` `.sql` |
+| Code | `.py` `.js` `.jsx` `.mjs` `.cjs` `.ts` `.tsx` `.go` `.rs` `.c` `.h` `.cc` `.cpp` `.cxx` `.hh` `.hpp` `.java` `.kt` `.scala` `.cs` `.php` `.rb` `.swift` `.lua` `.r` `.hs` `.ex` `.exs` `.pl` `.sh` `.bash` `.ps1` `.css` `.proto` `.sol` `.cob` |
 
-## Develop
+Atlas checks each file's real content, so a renamed file can't get past it.
+Scanned PDFs have no text to read, and `.docx` isn't supported yet.
+
+## Configuration
+
+Atlas needs only four environment variables, all optional. Everything else is
+changed in **Settings** and stored in the database.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `ATLAS_DATA_PATH` | `~/.atlas` | Where all data lives |
+| `ATLAS_HOST` | `127.0.0.1` | Address to listen on |
+| `ATLAS_PORT` | `8000` | Port to listen on |
+| `ATLAS_MASTER_KEY` | Generated file | Encrypts API keys and signs sessions |
 
 ```bash
-uv sync             # install the project + dev tools
-uv run atlas init   # once
-uv run atlas        # run it
+ATLAS_DATA_PATH=/srv/atlas ATLAS_HOST=0.0.0.0 ATLAS_PORT=9000 uv run atlas
 ```
 
-`uv run atlas` with no subcommand runs the server, and builds the web UI first
-if `service/web` is missing — so a fresh clone is one command, not two. It is
-skipped when the UI is already built, when npm is absent (the API then serves
-headless), and for an installed wheel, which ships the UI as package data and
-has no sources to build from. `--no-build` opts out; `atlas build-web` runs it
-on its own.
+### Your data
 
-For backend auto-reload use `uv run atlas serve --reload`.
-
-With the default all-local configuration you also need Ollama running
-(`ollama serve`) with the configured models pulled.
-
-The UI's own dev server, with hot reload and an `/api` proxy to the above:
-
-```bash
-cd web && npm install && npm run dev       # -> http://localhost:5173
+```text
+~/.atlas/
+  db/atlas.db    users, projects, chats, settings
+  vector_db/     the search index
+  documents/     your uploaded files
+  master.key     encrypts your API keys
 ```
 
-Checks:
+To back up, stop Atlas and copy the whole folder. Keep `master.key` with it:
+without that key, saved API keys must be entered again and everyone must sign
+in again. Database upgrades run automatically at startup.
+
+## Sharing it with a team
+
+By default, only your own computer can reach Atlas. To share it on a trusted
+network, set `ATLAS_HOST=0.0.0.0`.
+
+**Don't expose Atlas directly to the internet yet.** It has no built-in HTTPS
+or login rate limiting. Put it behind a VPN, or behind a reverse proxy with
+HTTPS and access control. If you use a proxy, turn off response buffering for
+`/api/` so chat answers keep streaming.
+
+## Known limitations
+
+- There is no standalone search page. Search happens through chat.
+- Forgotten passwords need an admin's reset link, and the owner has no recovery
+  path yet.
+- Invite links can't be listed or revoked before they expire.
+- A disabled user's current session can keep working until its access token
+  expires.
+- Connector credentials are stored in the database without encryption, and URL
+  connectors can reach internal addresses. Only give connector access to people
+  you trust.
+- Connector syncs run while you wait rather than in the background.
+
+## Development
 
 ```bash
+uv sync                  # install Atlas and the dev tools
+
+# Terminal 1: the API, with a separate data folder
+ATLAS_DATA_PATH=~/.atlas-dev uv run atlas
+
+# Terminal 2: the web app with hot reload, at http://localhost:5173
+cd web && npm install && npm run dev
+```
+
+API docs are served at <http://127.0.0.1:8000/api/docs>.
+
+After changing the web app, run `npm run build` in `web/` so the server on port
+8000 serves the new version.
+
+### Checks
+
+```bash
+uv run pytest                # everything, in about 20 seconds
+uv run pytest -m "not e2e"   # skip the real-server tests
 uv run ruff check .
+uv run ruff format --check .
 uv run mypy
-uv run pytest
 ```
 
-### Build the CLI
+Tests use temporary folders and fake model servers. They never touch your data,
+Ollama or a paid API. `tests/test_e2e.py` starts a real Atlas server and drives
+it over HTTP.
 
-Three steps, in this order:
+### Build a package
 
 ```bash
-uv run atlas build-web                                         # 1
-uv build --wheel                                               # 2
-uv tool install --force ./dist/atlas-0.1.0-py3-none-any.whl    # 3
+uv build
+uv tool install --force ./dist/atlas-0.1.0-py3-none-any.whl
+atlas
 ```
 
-1. **Required for a wheel.** Vite writes the SPA into `service/web/`, which is
-   gitignored build output; the wheel force-includes it. Skip this and the wheel
-   ships without a UI, and an installed `atlas` serves nothing at `/` — it
-   cannot build one, because a wheel has no `web/` sources. (`atlas serve` from
-   a *checkout* builds it automatically; a wheel build cannot.) Installs npm
-   dependencies first if they are missing. `python scripts/build_web.py` is the
-   same thing without the CLI.
-2. Hatchling force-includes `service/web/**` (see `artifacts` in
-   `pyproject.toml`), alongside `alembic.ini` and the migrations.
-3. Install from the **wheel path**, not from `.`. `uv tool install --force .`
-   can silently reuse a cached wheel and leave you testing stale code. Do not
-   reach for `--no-cache` instead — it re-downloads every dependency.
+The build compiles the web app into the wheel, so installing the wheel doesn't
+need Node.
 
-The build is Python rather than shell so it works on Windows too; the
-implementation is `cli/webbuild.py`, shared by `atlas serve`, `atlas build-web`
-and `scripts/build_web.py` so they cannot drift.
+### Project layout
 
-## Layout
-
-```
-service/         the FastAPI backend, importable as `service`
-  api/           app factory, routes, request-scoped wiring
-  core/          application services: auth, projects, documents, ingestion,
-                 search, answer, connectors, worker
-  config/        settings + ATLAS_HOME resolution
-  ingest/        loaders, splitters, embeddings, pipeline
-  storage/       ports (store/) and adapters (sql/, blob/, vector/)
-  models/        domain dataclasses
-  migrations/    Alembic, shipped inside the package
-  web/           built SPA, emitted by vite (gitignored)
-cli/             the `atlas` console script, importable as `cli`
-web/             React + Vite source
-docs/PLAN.md     roadmap
+```text
+src/atlas/
+  main.py        app and server entry point
+  container.py   wires everything together
+  config/        environment settings and encryption
+  controllers/   HTTP: request in, one service call, response out
+  services/      business rules: auth, projects, documents, chat, settings
+  repository/    database and file storage
+  models/        database entities
+  core/          the AI engine: parsing, providers, vector store, chat
+  migrations/    database migrations
+web/             React app
+tests/           focused tests and the backend e2e
+scripts/         build hook that compiles the web app
 ```

@@ -1,92 +1,137 @@
+# Atlas packaging and tool configuration.
+#
+#   uv sync          install Atlas (editable) + dev tools; builds the UI once
+#   uv build         sdist + wheel in dist/, UI included
+#   uv run atlas     run it
+#
+# Runtime settings (models, ports, paths) do NOT live here: they are in
+# the database; only four ATLAS_* environment variables configure startup.
+
+# --- Package metadata ---------------------------------------------------------
+
 [project]
 name = "atlas"
+# The single source of the version: `atlas version` and the API's OpenAPI
+# document both read it from the installed metadata.
 version = "0.1.0"
 description = "A production-grade Retrieval-Augmented Generation (RAG) service."
 readme = "README.md"
 requires-python = ">=3.11"
 
+# Grouped by what they are for. A new provider, file format or database driver
+# goes in its group; run `uv lock` after editing.
 dependencies = [
-    "aiosqlite>=0.22.1",
-    "alembic>=1.18.4",
-    "asyncpg>=0.31.0",
-    "beautifulsoup4>=4.12.0",
-    "docx2txt>=0.8",
-    "email-validator>=2.0.0",
+    # Web server and CLI
     "fastapi>=0.139.0",
-    "httpx>=0.27",
-    "langchain-core>=1.0",
-    "pypdf>=5.0.0",
-    "jwt>=1.4.0",
-    "lancedb>=0.34.0",
-    "langchain-community>=0.4.2",
-    "langchain-text-splitters>=1.1.2",
-    "linkify-it-py>=2.1.0",
-    "markdown-it-py>=4.2.0",
-    "pgvector>=0.4.2",
-    "pwdlib[argon2]>=0.3.0",
+    "uvicorn[standard]>=0.51.0",
+    "python-multipart>=0.0.32",  # FastAPI needs it to accept file uploads
+    "typer>=0.15.0",
+    "httpx>=0.27",               # connectors (URL, Drive) and init's checks
+    # Configuration
     "pydantic>=2.13.4",
     "pydantic-settings>=2.14.1",
-    "python-dotenv>=1.2.2",
-    "python-magic>=0.4.27",
-    "python-multipart>=0.0.32",
+    # Auth
+    "jwt>=1.4.0",
+    "pwdlib[argon2]>=0.3.0",
+    # Relational storage: SQLite only
     "sqlalchemy[asyncio]>=2.0.50",
-    "uvicorn[standard]>=0.51.0",
-    "chardet>=7.5.1",
+    "alembic>=1.18.4",
+    "aiosqlite>=0.22.1",
+    # Chunk index
+    "lancedb>=0.34.0",
+    # RAG engine: splitting, embeddings and chat models. Each provider is its
+    # own package; one only needs to be installed to be selectable.
+    "langchain-core>=1.0",
+    "langchain-text-splitters>=1.1.2",
     "langchain-ollama>=1.1.0",
     "langchain-openai>=1.4.3",
     "langchain-anthropic>=1.5.5",
-    "typer>=0.15.0",
+    # Document parsers (src/atlas/core/parsing/), one per file format
+    "pypdf>=5.0.0",           # .pdf
+    "docx2txt>=0.8",          # .docx
+    "beautifulsoup4>=4.12.0", # .html
+    "chardet>=7.5.1",         # text in a non-UTF-8 encoding
+    "magika>=1.0.3,<2",       # verifies a file's type from its content
+    "langchain>=1.5.0",
+    "google-genai>=3.4.0",
+    "obstore>=0.12.1,<0.13",
+    "langchain-community>=0.4.2,<0.5",
+    "cryptography>=49.0.0",
+    "langchain-google-genai>=4.5.2,<5",
 ]
 
 [project.scripts]
-atlas = "cli.main:main"
+# The `atlas` command. `python -m atlas` reaches the same function.
+atlas = "atlas.main:main"
+
+[dependency-groups]
+# Installed by `uv sync`, never shipped in the wheel.
+dev = [
+    "ruff>=0.13.0",
+    "mypy>=1.18.0",
+    "pytest>=9.1.1",
+    "pytest-cov>=7.0.0",
+    "ipython>=9.6.0",
+]
+
+# --- Build --------------------------------------------------------------------
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.hatch.build]
+# The built UI is gitignored (it is build output) and hatchling leaves out
+# ignored files by default, so it is named here or the wheel ships without
+# a UI. Anything else generated at build time and gitignored goes here too.
+artifacts = ["src/atlas/static/**"]
+
+[tool.hatch.build.hooks.custom]
+# Runs `npm ci && npm run build` in web/ before packaging, writing the UI into
+# src/atlas/static. See the script's docstring for when it rebuilds.
+path = "scripts/hatch_build.py"
+
 [tool.hatch.build.targets.wheel]
-packages = ["service", "cli"]
-# The staged SPA (scripts/build-web.sh) is build output and therefore
-# gitignored; hatchling excludes VCS-ignored files by default, so it has to be
-# force-included or every wheel would ship without a UI.
-artifacts = ["service/web/**"]
+# The wheel holds exactly one package. Migrations and alembic.ini live inside
+# it, so an installed Atlas can migrate its own database.
+packages = ["src/atlas"]
 
-[dependency-groups]
-dev = [
-    "ipython>=9.6.0",
-    "pytest>=9.1.1",
-    "pytest-cov>=7.0.0",
-    "ruff>=0.13.0",
-    "mypy>=1.18.0",
-]
+[tool.hatch.build.targets.sdist]
+# Kept out of the source archive. web/ is excluded because the sdist carries
+# the built UI instead, so building a wheel from it needs no Node.
+exclude = ["/web", "/.ref", "/tests/fixtures"]
 
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-python_files = ["test_*.py", "*_test.py"]
-addopts = [
-    "-ra",
-]
+# --- Lint, types, tests -------------------------------------------------------
 
 [tool.ruff]
 line-length = 79
-target-version = "py311"
+target-version = "py311"  # keep in step with requires-python
+
+[tool.ruff.format]
+# Generated by Alembic; left as written.
+exclude = ["src/atlas/migrations/versions/*"]
 
 [tool.ruff.lint]
 select = [
-    "E",
-    "F",
-    "I",
-    "UP",
-    "B",
+    "E",   # pycodestyle errors
+    "F",   # pyflakes: unused imports, undefined names
+    "I",   # import sorting
+    "UP",  # modern syntax for the target Python version
+    "B",   # bugbear: likely bugs
 ]
 
 [tool.ruff.lint.per-file-ignores]
 # Alembic autogenerates long op.create_table/sa.Column lines; leave them.
-"service/migrations/versions/*" = ["E501"]
+"src/atlas/migrations/versions/*" = ["E501"]
 
 [tool.mypy]
-files = ["service", "cli"]  # add "tests" once there are test modules
+files = ["src/atlas"]  # add "tests" once there are test modules
 python_version = "3.11"
-strict = true
+strict = true          # must stay clean; see AGENTS.md
 warn_unused_configs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+addopts = ["-ra"]      # summarise every non-passing test at the end
+markers = ["e2e: starts a real server (skip with -m 'not e2e')"]

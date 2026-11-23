@@ -1,37 +1,43 @@
+import { useEffect } from 'react'
+import { WifiOff } from 'lucide-react'
 import { useAuth } from './lib/auth.jsx'
-import { useHashRoute } from './lib/router.js'
-import AuthScreen from './components/AuthScreen.jsx'
-import Workspace from './components/Workspace.jsx'
-import { Brand, Spinner } from './components/ui.jsx'
+import { navigate, useRoute } from './lib/router.js'
+import { Button, Empty } from './ui/index.jsx'
+import { Join, Login, Reset, Setup } from './pages/Auth.jsx'
+import Onboarding from './pages/Onboarding.jsx'
+import Shell from './pages/Shell.jsx'
 
-// Thin top-level router. Rendering is gated purely on the *verified* auth
-// status from useAuth() -- never on token presence -- so an unauthenticated
-// visitor always lands on the login/invite screen, and only a validated
-// session reaches the workspace.
 export default function App() {
-  const { status } = useAuth()
-  const [route, navigate] = useHashRoute()
+  const { status, retry, isInstanceAdmin } = useAuth()
+  const route = useRoute()
 
-  if (status === 'checking') return <Splash />
+  // The splash in index.html stays until we know which screen to show.
+  useEffect(() => {
+    if (status === 'loading') {
+      document.getElementById('splash')?.classList.remove('done')
+    } else {
+      document.getElementById('splash')?.classList.add('done')
+    }
+  }, [status])
 
-  if (status === 'anon') {
-    const invite = route.name === 'invite' ? route.token : ''
-    return <AuthScreen initialInvite={invite} />
-  }
-
-  return <Workspace route={route} navigate={navigate} />
-}
-
-function Splash() {
-  return (
-    <div className="min-h-screen flex items-center justify-center p-5">
-      <div className="text-center">
-        <Brand className="text-3xl font-extrabold tracking-tight" />
-        <div className="flex items-center justify-center gap-2 mt-3">
-          <Spinner />
-          <span className="text-dim text-xs">restoring your session…</span>
-        </div>
+  if (status === 'loading') return null
+  if (status === 'offline') {
+    return (
+      <div className="grid min-h-dvh place-items-center">
+        <Empty icon={WifiOff} title="Can't reach Atlas" action={<Button variant="primary" onClick={retry}>Try again</Button>}>
+          The server isn't responding. Check that it's running, then try again.
+        </Empty>
       </div>
-    </div>
-  )
+    )
+  }
+  if (route.name === 'join') return <Join token={route.token} />
+  if (route.name === 'reset') return <Reset token={route.token} />
+  if (status === 'setup') return <Setup />
+  if (status === 'signed-out') return <Login />
+  if (route.name === 'login' || route.name === 'setup') {
+    navigate('#/', { replace: true })
+    return null
+  }
+  if (route.name === 'onboarding' && isInstanceAdmin) return <Onboarding />
+  return <Shell route={route} />
 }

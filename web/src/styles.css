@@ -1,70 +1,234 @@
 @import 'tailwindcss';
+@import '@fontsource-variable/geist';
+@import '@fontsource-variable/geist-mono';
+@import '@fontsource-variable/newsreader';
 
-/* Design tokens -> Tailwind utilities (bg-elev, text-dim, border-line,
-   text-accent, bg-accent/15, …). Change a value here and it flows everywhere. */
-@theme {
-  --color-bg: #0a0c12;
-  --color-elev: #12161f;
-  --color-elev-2: #1a1f2b;
-  --color-input: #0e121b;
-  --color-line: #232936;
-  --color-line-2: #313a4c;
-  --color-ink: #edf0f6;
-  --color-dim: #97a2b6;
-  --color-faint: #626d82;
-  --color-accent: #818cf8;
-  --color-accent-2: #c084fc;
-  --color-accent-strong: #6366f1;
-  --color-ok: #34d399;
-  --color-warn: #fbbf24;
-  --color-bad: #fb7185;
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
 
-  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial,
-    sans-serif;
+/* Paper and ink, like a printed map. Change a value here and it flows
+   everywhere through the Tailwind utilities below. */
+:root {
+  --canvas: #f6f3ec;
+  --surface: #fffdf8;
+  --raised: #efeadf;
+  --line: #e2dccd;
+  --line-strong: #cfc7b4;
+  --ink: #1d1b16;
+  --muted: #676154;
+  --faint: #8d8676;
+  --accent: #c4501b;
+  --accent-soft: #f7e3d6;
+  --on-accent: #fffaf5;
+  --ok: #2f7d57;
+  --ok-soft: #dcefe4;
+  --warn: #99660a;
+  --warn-soft: #f6e9c8;
+  --bad: #b83232;
+  --bad-soft: #f8dfdc;
+  --shadow: 0 1px 2px rgb(60 50 30 / 0.06), 0 12px 32px -12px rgb(60 50 30 / 0.2);
 }
 
-/* The page canvas + scrollbars are the only things that can't be expressed as
-   utilities on an element; everything else lives in the JSX as Tailwind. */
+[data-theme='dark'] {
+  --canvas: #0f1413;
+  --surface: #161c1a;
+  --raised: #1f2724;
+  --line: #29322e;
+  --line-strong: #3a4641;
+  --ink: #ece8dd;
+  --muted: #a3aaa3;
+  --faint: #79827b;
+  --accent: #e8804a;
+  --accent-soft: #3a2519;
+  --on-accent: #1c0f07;
+  --ok: #62c795;
+  --ok-soft: #17322a;
+  --warn: #e3b64f;
+  --warn-soft: #352a13;
+  --bad: #f0827a;
+  --bad-soft: #3b1f1e;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 16px 40px -12px rgb(0 0 0 / 0.6);
+}
+
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-raised: var(--raised);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-on-accent: var(--on-accent);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-bad: var(--bad);
+  --color-bad-soft: var(--bad-soft);
+  --shadow-float: var(--shadow);
+  --font-sans: 'Geist Variable', system-ui, sans-serif;
+  --font-mono: 'Geist Mono Variable', ui-monospace, monospace;
+  --font-serif: 'Newsreader Variable', Georgia, serif;
+}
+
 @layer base {
   html {
+    color-scheme: light;
+    -webkit-text-size-adjust: 100%;
+  }
+  html[data-theme='dark'] {
     color-scheme: dark;
   }
   body {
-    color: var(--color-ink);
-    background:
-      radial-gradient(1200px 600px at 15% -10%, rgb(129 140 248 / 0.08), transparent 60%),
-      radial-gradient(1000px 700px at 110% 10%, rgb(192 132 252 / 0.06), transparent 55%),
-      linear-gradient(180deg, #0d1018, #0a0c12);
-    background-attachment: fixed;
+    margin: 0;
+    color: var(--ink);
+    background: var(--canvas);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.5;
     -webkit-font-smoothing: antialiased;
   }
   ::selection {
-    background: rgb(129 140 248 / 0.22);
+    background: color-mix(in srgb, var(--accent) 28%, transparent);
   }
   * {
     scrollbar-width: thin;
-    scrollbar-color: var(--color-line-2) transparent;
+    scrollbar-color: var(--line-strong) transparent;
   }
-  *::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
   }
-  *::-webkit-scrollbar-thumb {
-    background: var(--color-line-2);
-    border-radius: 999px;
-    border: 2px solid transparent;
-    background-clip: padding-box;
+  button {
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: default;
+  }
+  input[type='number'] {
+    appearance: textfield;
+  }
+  input[type='number']::-webkit-inner-spin-button {
+    appearance: none;
+  }
+  dialog {
+    color: inherit;
+  }
+  dialog::backdrop {
+    background: rgb(15 18 16 / 0.45);
+    backdrop-filter: blur(3px);
   }
 }
 
-/* subtle entrance for chat turns (used via animate-[msgin_...]) */
-@keyframes msgin {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
+@keyframes rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes slide-in {
+  from { transform: translateX(24px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+@keyframes shimmer {
+  to { background-position: -200% 0; }
+}
+@keyframes draw {
+  from { stroke-dashoffset: 1; }
+  to { stroke-dashoffset: 0; }
+}
+@keyframes blink {
+  50% { opacity: 0.15; }
+}
+
+@utility animate-rise {
+  animation: rise 0.28s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+@utility animate-fade {
+  animation: fade 0.2s ease both;
+}
+@utility animate-slide {
+  animation: slide-in 0.24s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+@utility skeleton {
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--raised) 25%, var(--line) 50%, var(--raised) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s linear infinite;
+}
+
+.contour {
+  fill: none;
+  stroke: currentColor;
+  stroke-dasharray: 1;
+  animation: draw 2.4s cubic-bezier(0.3, 0.6, 0.2, 1) both;
+}
+
+.caret::after {
+  content: '';
+  display: inline-block;
+  width: 0.5em;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: -0.12em;
+  border-radius: 1px;
+  background: var(--accent);
+  animation: blink 1s steps(2) infinite;
+}
+
+/* Answers, rendered from Markdown. */
+.prose-atlas {
+  font-size: 15px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.prose-atlas > :first-child { margin-top: 0; }
+.prose-atlas > :last-child { margin-bottom: 0; }
+.prose-atlas p, .prose-atlas ul, .prose-atlas ol, .prose-atlas pre, .prose-atlas table, .prose-atlas blockquote {
+  margin: 0.8em 0;
+}
+.prose-atlas ul { list-style: disc; padding-left: 1.4em; }
+.prose-atlas ol { list-style: decimal; padding-left: 1.4em; }
+.prose-atlas li { margin: 0.25em 0; }
+.prose-atlas h1, .prose-atlas h2, .prose-atlas h3, .prose-atlas h4 {
+  margin: 1.3em 0 0.4em;
+  font-family: var(--font-serif);
+  font-weight: 500;
+  line-height: 1.25;
+}
+.prose-atlas h1 { font-size: 1.55em; }
+.prose-atlas h2 { font-size: 1.35em; }
+.prose-atlas h3 { font-size: 1.15em; }
+.prose-atlas a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.prose-atlas blockquote { padding-left: 1em; border-left: 2px solid var(--line-strong); color: var(--muted); }
+.prose-atlas code {
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  background: var(--raised);
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+}
+.prose-atlas pre {
+  overflow-x: auto;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--raised);
+  line-height: 1.55;
+}
+.prose-atlas pre code { padding: 0; background: none; }
+.prose-atlas table { display: block; overflow-x: auto; border-collapse: collapse; font-size: 0.93em; }
+.prose-atlas th, .prose-atlas td { padding: 6px 12px; border: 1px solid var(--line); text-align: left; }
+.prose-atlas th { background: var(--raised); font-weight: 600; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

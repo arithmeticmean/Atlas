@@ -18,7 +18,7 @@ htmlcov/
 
 # --- Runtime data (SQLite DB, LanceDB dataset, blob store) ---
 /data/
-service/data/
+src/atlas/data/
 *.db
 *.sqlite3
 
@@ -26,8 +26,8 @@ service/data/
 /run/
 
 # --- Build output: wheels/sdists (dist/) and the SPA bundled into the
-# package by the release build (service/web/) ---
-service/web/
+# package by the build hook (src/atlas/static/) ---
+src/atlas/static/
 
 # --- Node / Vite (web) ---
 node_modules/
